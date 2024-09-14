@@ -1,8 +1,7 @@
 import pytest
 import torch
-import torch.nn as nn
 
-from src.model import AttentionBlock
+from src.attention_blocks import AttentionBlock
 
 
 @pytest.fixture(params=[32, 64, 128])
