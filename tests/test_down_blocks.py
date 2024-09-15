@@ -2,9 +2,8 @@ import pytest
 import torch
 import torch.nn as nn
 
-from src.down_blocks import DownsampleDoubleResBlock, ResBlockBatchNorm
-
-from src.res_blocks import ResBlockGroupNorm
+from src.down_blocks import DownsampleDoubleResBlock
+from src.res_blocks import ResBlockGroupNorm, ResBlockBatchNorm
 
 
 @pytest.fixture(params=[DownsampleDoubleResBlock])

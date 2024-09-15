@@ -1,10 +1,7 @@
 from abc import ABC, abstractmethod
-
 import torch
 import torch.nn as nn
-
 from src.res_blocks import ResBlock, ResBlockBatchNorm
-
 from typing import Type, Dict, Any
 
 
