@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class AttentionBlock(nn.Module):
+class SpatialAttentionUNet(nn.Module):
     """
     Optimized Attention block for the Residual Attention U-Net model.
 
@@ -19,7 +19,7 @@ class AttentionBlock(nn.Module):
     """
 
     def __init__(self, base_channels: int, dropout_rate: float = 0.1):
-        super(AttentionBlock, self).__init__()
+        super(SpatialAttentionUNet, self).__init__()
 
         self.base_channels = base_channels
         self.dropout_rate = dropout_rate
