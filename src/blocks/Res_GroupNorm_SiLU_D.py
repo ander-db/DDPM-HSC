@@ -1,4 +1,4 @@
-from Res_Base import ResBlock
+from .Res_Base import ResBlock
 
 import torch.nn as nn
 import warnings

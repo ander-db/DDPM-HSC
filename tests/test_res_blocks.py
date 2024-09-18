@@ -3,11 +3,9 @@ import pytest
 import torch
 import torch.nn as nn
 
-from src.res_blocks import (
-    ResBlock,
-    ResBlockGroupNorm,
-    ResBlockBatchNorm,
-)
+from src.blocks.Res_Base import ResBlock
+from src.blocks.Res_BatchNorm_ReLU_D import ResBlockBatchNorm
+from src.blocks.Res_GroupNorm_SiLU_D import ResBlockGroupNorm
 
 
 @pytest.fixture

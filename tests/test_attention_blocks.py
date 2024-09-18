@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from src.attention_blocks import AttentionBlock
+from src.attention.spatial_attention import SpatialAttentionUNet
 
 
 @pytest.fixture(params=[32, 64, 128])
@@ -16,7 +16,7 @@ def dropout_rate(request):
 
 @pytest.fixture
 def attention_block(base_channels, dropout_rate):
-    return AttentionBlock(base_channels=base_channels, dropout_rate=dropout_rate)
+    return SpatialAttentionUNet(base_channels=base_channels, dropout_rate=dropout_rate)
 
 
 @pytest.mark.parametrize(
