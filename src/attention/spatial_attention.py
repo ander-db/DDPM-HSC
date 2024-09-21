@@ -1,3 +1,4 @@
+from typing import Tuple
 import torch
 import torch.nn as nn
 
@@ -18,10 +19,10 @@ class SpatialAttentionUNet(nn.Module):
         dropout_rate (float, optional): Dropout rate. Default is 0.1.
     """
 
-    def __init__(self, base_channels: int, dropout_rate: float = 0.1):
+    def __init__(self, g_channels: int, dropout_rate: float = 0.1):
         super(SpatialAttentionUNet, self).__init__()
 
-        self.base_channels = base_channels
+        self.g_channels = g_channels
         self.dropout_rate = dropout_rate
 
         self._build_model()
@@ -30,29 +31,25 @@ class SpatialAttentionUNet(nn.Module):
         """Build the optimized model architecture."""
         # Process input from skip connection
         self.W_x = nn.Conv2d(
-            self.base_channels * 2, self.base_channels, kernel_size=1, stride=2
+            self.g_channels // 2, self.g_channels, kernel_size=1, stride=2
         )
 
         # Process gating signal
-        self.W_g = nn.Conv2d(self.base_channels, self.base_channels, kernel_size=1)
+        self.W_g = nn.Conv2d(self.g_channels, self.g_channels, kernel_size=1, stride=1)
+
+        # ReLU activation function
+        self.relu = nn.ReLU(inplace=True)
 
         # Generate attention map
-        self.psi = nn.Sequential(
-            nn.Conv2d(self.base_channels, 1, kernel_size=1), nn.Sigmoid()
-        )
+        self.psi = nn.Conv2d(self.g_channels, 1, kernel_size=1)
+
+        self.sigmoid = nn.Sigmoid()
 
         # Use ConvTranspose2d for upsampling (can be faster than Upsample in some cases)
-        self.upsample = nn.Upsample(
-            scale_factor=2, mode="bilinear", align_corners=False
-        )
-
-        # Combine final convolution and dropout into a sequential block
-        self.final_block = nn.Sequential(
-            nn.Conv2d(self.base_channels * 2, self.base_channels, kernel_size=1),
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
             nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
         )
-
-        self.relu = nn.ReLU(inplace=True)
 
         self._init_weights()
 
@@ -64,7 +61,9 @@ class SpatialAttentionUNet(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor, g: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, g: torch.Tensor, x: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the attention block.
 
@@ -77,23 +76,16 @@ class SpatialAttentionUNet(nn.Module):
         Returns:
             torch.Tensor: Attended feature map, shape (batch_size, base_channels, height, width)
         """
-        # Process skip connection input
         theta_x = self.W_x(x)
-
-        # Process gating signal
         phi_g = self.W_g(g)
 
-        # Combine and apply ReLU
         f = self.relu(theta_x + phi_g)
-
-        # Generate attention map
         f = self.psi(f)
+        f = self.sigmoid(f)
 
-        # Upsample attention map
-        f = self.upsample(f)
+        attention_map = self.upsample(f)
+        attention_map = attention_map.clamp(min=0, max=1)
 
-        # Apply attention
-        y = x * f
+        y = x * attention_map
 
-        # Final processing
-        return self.final_block(y)
+        return y, attention_map
