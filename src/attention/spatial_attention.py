@@ -47,7 +47,9 @@ class SpatialAttentionUNet(nn.Module):
 
         # Use ConvTranspose2d for upsampling (can be faster than Upsample in some cases)
         self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+            nn.ConvTranspose2d(
+                1, 1, kernel_size=4, stride=2, padding=1, output_padding=0
+            ),
             nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
         )
 
