@@ -72,9 +72,7 @@ class ResBlockGroupNorm(nn.Module):
 
     def _build_main_path(self) -> nn.Sequential:
         n_groups_first = self._adjust_groups(self.in_channels)
-        print(f"Number of groups first: {n_groups_first}")
         n_groups_second = self._adjust_groups(self.out_channels)
-        print(f"Number of groups second: {n_groups_second}")
 
         return nn.Sequential(
             nn.GroupNorm(n_groups_first, self.in_channels),
