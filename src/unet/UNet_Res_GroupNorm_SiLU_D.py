@@ -15,8 +15,8 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         self,
         in_channels=3,
         out_channels=3,
-        encoder_channel_layers=[64, 128, 256, 512],
-        time_embeddings_dim=None,
+        encoder_channels=[64, 128, 256, 512],
+        time_embedding_dim=None,
         loss_fn=nn.MSELoss(),
         lr=1e-4,
     ):
@@ -24,70 +24,69 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         self.save_hyperparameters(ignore=["loss_fn"])
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.encoder_channel_layers = encoder_channel_layers
-        self.decoder_channel_layers = encoder_channel_layers[::-1]
-        self.time_embeddings_dim = time_embeddings_dim
+        self.encoder_channels = encoder_channels
+        self.decoder_channels = encoder_channels[::-1]
+        self.time_embedding_dim = time_embedding_dim
         self.loss_fn = loss_fn
         self.lr = lr
 
         self._build_network()
 
     def _build_network(self):
-        self.first_layer = ResBlockGroupNorm(
-            self.in_channels, self.encoder_channel_layers[0]
-        )
+        self.first_layer = ResBlockGroupNorm(self.in_channels, self.encoder_channels[0])
 
         self.encoder = nn.ModuleList(
             [
                 Down_Res_GroupNorm_SiLU_D(
-                    self.encoder_channel_layers[i], self.encoder_channel_layers[i + 1]
+                    self.encoder_channels[i], self.encoder_channels[i + 1]
                 )
-                for i in range(len(self.encoder_channel_layers) - 1)
+                for i in range(len(self.encoder_channels) - 1)
             ]
         )
 
         self.mid = Down_Res_GroupNorm_SiLU_D(
-            self.encoder_channel_layers[-1], self.encoder_channel_layers[-1] * 2
+            self.encoder_channels[-1], self.encoder_channels[-1] * 2
         )
 
         self.decoder = nn.ModuleList(
             [
                 Up_Res_GroupNorm_SiLU_D(
-                    self.decoder_channel_layers[i] * 2,
-                    self.decoder_channel_layers[i],
+                    self.decoder_channels[i] * 2,
+                    self.decoder_channels[i],
                 )
-                for i in range(len(self.decoder_channel_layers))
+                for i in range(len(self.decoder_channels))
             ]
         )
 
         self.last_layer = ResBlockGroupNorm(
-            self.decoder_channel_layers[-1], self.out_channels
+            self.decoder_channels[-1], self.out_channels
         )
 
         self.attention = nn.ModuleList(
             [
-                SpatialAttentionUNet(self.decoder_channel_layers[i] * 2)
-                for i in range(len(self.decoder_channel_layers))
+                SpatialAttentionUNet(self.decoder_channels[i] * 2)
+                for i in range(len(self.decoder_channels))
             ]
         )
 
-        if self.time_embeddings_dim is not None:
+        if self.time_embedding_dim is not None:
             self._build_time_embeddings()
 
     def _build_time_embeddings(self):
         self.time_embeddings = nn.ModuleList(
             [
-                TimeEmbeddingProjectionLinearSiLU(self.time_embeddings_dim, channel)
-                for channel in self.encoder_channel_layers
-                + [self.encoder_channel_layers[-1] * 2]
-                + self.decoder_channel_layers
+                TimeEmbeddingProjectionLinearSiLU(self.time_embedding_dim, channel)
+                for channel in self.encoder_channels
+                + [self.encoder_channels[-1] * 2]
+                + self.decoder_channels
             ]
         )
 
     def forward(self, x: torch.Tensor, t: Optional[torch.Tensor]) -> torch.Tensor:
+        print(f"[DEBUG] t: {t}")
         return (
             self._forward_with_time_embeddings(x, t)
-            if self.time_embeddings_dim is not None
+            if self.time_embedding_dim is not None
             else self._forward_without_time_embeddings(x)
         )
 
@@ -102,8 +101,11 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         g = self.mid(g)
 
         for i, decoder_layer in enumerate(self.decoder):
+            print(f"[DEBUG] i: {i}")
             attn, attn_map = self.attention[i](g=g, x=skip_connections[-(i + 1)])
+            print(f"[DEBUG] attn.shape: {attn.shape}")
             g = decoder_layer(g=g, x=attn)
+            print(f"[DEBUG] g.shape: {g.shape}")
 
         return self.last_layer(g)
 
