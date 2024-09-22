@@ -83,7 +83,6 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         )
 
     def forward(self, x: torch.Tensor, t: Optional[torch.Tensor]) -> torch.Tensor:
-        print(f"[DEBUG] t: {t}")
         return (
             self._forward_with_time_embeddings(x, t)
             if self.time_embedding_dim is not None
@@ -101,11 +100,8 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         g = self.mid(g)
 
         for i, decoder_layer in enumerate(self.decoder):
-            print(f"[DEBUG] i: {i}")
             attn, attn_map = self.attention[i](g=g, x=skip_connections[-(i + 1)])
-            print(f"[DEBUG] attn.shape: {attn.shape}")
             g = decoder_layer(g=g, x=attn)
-            print(f"[DEBUG] g.shape: {g.shape}")
 
         return self.last_layer(g)
 

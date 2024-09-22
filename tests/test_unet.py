@@ -49,7 +49,6 @@ def test_unet_forward_pass(unet_model):
     batch_size = 4
     input_tensor = torch.randn(batch_size, 3, 256, 256)
     output = unet_model(input_tensor, None)
-    print(f"{output.shape=}")
     assert output.shape == (batch_size, 3, 256, 256)
 
 
