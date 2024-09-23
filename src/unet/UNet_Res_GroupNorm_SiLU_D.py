@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 import torch
 import torch.nn as nn
 import lightning as l
@@ -15,8 +15,8 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         self,
         in_channels=3,
         out_channels=3,
-        encoder_channels=[64, 128, 256, 512],
-        time_embedding_dim=None,
+        encoder_channels: List[int] = [64, 128, 256, 512],
+        time_embedding_dim: int | None = None,
         loss_fn=nn.MSELoss(),
         lr=1e-4,
     ):
@@ -128,6 +128,27 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
             g += t_emb[:, :, None, None]
 
         return self.last_layer(g)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.forward(x, None)
+        loss = self.loss_fn(y_hat, y)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x, None)
+        loss = self.loss_fn(y_hat, y)
+        self.log("val_loss", loss)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x, None)
+        loss = self.loss_fn(y_hat, y)
+        self.log("test_loss", loss)
+        return loss
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
