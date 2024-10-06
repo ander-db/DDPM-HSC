@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.optim.adam import Adam
 
 import lightning as l
 
@@ -50,7 +51,7 @@ class DDPM_2D(l.LightningModule):
 
     @torch.no_grad()
     def _build_network(self):
-        self.unet = UNet_Res_GroupNorm_SiLU_D(
+        self.model = UNet_Res_GroupNorm_SiLU_D(
             in_channels=self.in_channels,
             out_channels=self.out_channels,
             encoder_channels=self.encoder_channels,
@@ -64,7 +65,7 @@ class DDPM_2D(l.LightningModule):
         return self.model(x, pe_emb)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, eps=1e-4)
+        optimizer = Adam(self.parameters(), lr=self.lr)
         return optimizer
 
     def training_step(self, batch, batch_idx):
