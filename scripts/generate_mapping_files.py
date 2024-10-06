@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
 from sklearn.model_selection import KFold
-import seaborn as sns
 from astropy.io import fits
 import torch
 from torchmetrics.image import PeakSignalNoiseRatio
@@ -16,7 +15,7 @@ def write_mapping_file(filename: str, data: List[Tuple[str, str, float]]):
     """Write mapping data to a file."""
     with open(filename, "w") as f:
         for item in data:
-            f.write(f"{item[0]},{item[1]},{item[2]}\n")
+            f.write(f"{item[0]},{item[1]}\n")
 
 
 def setup_logging(log_file: str):
@@ -130,11 +129,23 @@ def generate_mapping_files(
     val_ratio: float = 0.1,
     seed: int = 42,
     cross_validation: int | None = None,
+    psnr_threshold: float | None = None,
 ):
     """
     Generate mapping files for train, validation, and test sets, with optional cross-validation.
     Also generates a PSNR distribution histogram.
     """
+    # Set up logging at the beginning
+    if cross_validation is None:
+        split_dir = os.path.join(output_dir, split_name)
+    else:
+        split_dir = (
+            output_dir  # For cross-validation, we'll create fold-specific logs later
+        )
+    os.makedirs(split_dir, exist_ok=True)
+    log_file = os.path.join(split_dir, "logs.txt")
+    setup_logging(log_file)
+
     input_files = [f for f in os.listdir(input_dir) if f.endswith(".fits")]
     target_files = [f for f in os.listdir(target_dir) if f.endswith(".fits")]
 
@@ -144,6 +155,17 @@ def generate_mapping_files(
 
     # Calculate PSNR for all files
     all_psnr_data = calculate_psnr(input_dir, target_dir, input_files, target_files)
+
+    # Filter based on PSNR threshold if specified
+    if psnr_threshold is not None:
+        original_count = len(all_psnr_data)
+        all_psnr_data = [item for item in all_psnr_data if item[2] >= psnr_threshold]
+        filtered_count = len(all_psnr_data)
+        log_and_print(f"Filtered data based on PSNR threshold: {psnr_threshold}")
+        log_and_print(
+            f"Original count: {original_count}, After filtering: {filtered_count}"
+        )
+
     all_psnr_values = [item[2] for item in all_psnr_data]
 
     # Set random seed
@@ -158,16 +180,11 @@ def generate_mapping_files(
         f"Input directory: {input_dir}",
         f"Target directory: {target_dir}",
         f"Seed: {seed}",
-        f"Total files: {total}",
+        f"Total files after filtering: {total}",
     ]
 
     if cross_validation is None:
         # Regular split
-        split_dir = os.path.join(output_dir, split_name)
-        os.makedirs(split_dir, exist_ok=True)
-        log_file = os.path.join(split_dir, "logs.log")
-        setup_logging(log_file)
-
         train_end = int(train_ratio * total)
         val_end = train_end + int(val_ratio * total)
 
@@ -212,7 +229,7 @@ def generate_mapping_files(
         ):
             fold_dir = os.path.join(output_dir, f"{split_name}_cv_{fold}")
             os.makedirs(fold_dir, exist_ok=True)
-            log_file = os.path.join(fold_dir, "logs.log")
+            log_file = os.path.join(fold_dir, "logs.txt")
             setup_logging(log_file)
 
             train_val_data = [all_psnr_data[i] for i in train_val_index]
@@ -300,6 +317,12 @@ if __name__ == "__main__":
         default=None,
         help="Number of folds for cross-validation. Default: None (no cross-validation)",
     )
+    parser.add_argument(
+        "--psnr_threshold",
+        type=float,
+        default=None,
+        help="Minimum PSNR value to include in the dataset. Default: None (include all)",
+    )
 
     args = parser.parse_args()
 
@@ -312,4 +335,5 @@ if __name__ == "__main__":
         args.val_ratio,
         args.seed,
         args.cross_validation,
+        args.psnr_threshold,
     )

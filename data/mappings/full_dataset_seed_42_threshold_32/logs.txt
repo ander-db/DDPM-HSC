@@ -1,0 +1,13 @@
+2024-10-06 17:26:31,153 - Filtered data based on PSNR threshold: 32.0
+2024-10-06 17:26:31,154 - Original count: 880, After filtering: 711
+2024-10-06 17:26:31,523 - Input directory: ./data/wide_64x64
+2024-10-06 17:26:31,523 - Target directory: ./data/dud_64x64
+2024-10-06 17:26:31,523 - Seed: 42
+2024-10-06 17:26:31,523 - Total files after filtering: 711
+2024-10-06 17:26:31,523 - Split type: Regular (Train/Validation/Test)
+2024-10-06 17:26:31,523 - Train ratio: 0.70
+2024-10-06 17:26:31,523 - Validation ratio: 0.15
+2024-10-06 17:26:31,523 - Test ratio: 0.15
+2024-10-06 17:26:31,524 - Train files: 497
+2024-10-06 17:26:31,524 - Validation files: 106
+2024-10-06 17:26:31,524 - Test files: 108
