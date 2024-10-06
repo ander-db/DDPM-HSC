@@ -11,11 +11,15 @@ import torch
 from torchmetrics.image import PeakSignalNoiseRatio
 
 
-def write_mapping_file(filename: str, data: List[Tuple[str, str, float]]):
+def write_mapping_file(
+    filename: str, data: List[Tuple[str, str, float]], input_dir: str, target_dir: str
+):
     """Write mapping data to a file."""
     with open(filename, "w") as f:
         for item in data:
-            f.write(f"{item[0]},{item[1]}\n")
+            f.write(
+                f"{os.path.join(input_dir, item[0])},{os.path.join(target_dir, item[1])}\n"
+            )
 
 
 def setup_logging(log_file: str):
@@ -192,9 +196,19 @@ def generate_mapping_files(
         val_data = all_psnr_data[train_end:val_end]
         test_data = all_psnr_data[val_end:]
 
-        write_mapping_file(os.path.join(split_dir, "train_files.txt"), train_data)
-        write_mapping_file(os.path.join(split_dir, "val_files.txt"), val_data)
-        write_mapping_file(os.path.join(split_dir, "test_files.txt"), test_data)
+        # Write mapping files with relative paths
+        write_mapping_file(
+            os.path.join(split_dir, "train_files.txt"),
+            train_data,
+            input_dir,
+            target_dir,
+        )
+        write_mapping_file(
+            os.path.join(split_dir, "val_files.txt"), val_data, input_dir, target_dir
+        )
+        write_mapping_file(
+            os.path.join(split_dir, "test_files.txt"), test_data, input_dir, target_dir
+        )
 
         # Generate PSNR histogram
         train_psnr = [item[2] for item in train_data]
@@ -242,9 +256,22 @@ def generate_mapping_files(
             train_data = train_val_data[:train_end]
             val_data = train_val_data[train_end:]
 
-            write_mapping_file(os.path.join(fold_dir, "train_files.txt"), train_data)
-            write_mapping_file(os.path.join(fold_dir, "val_files.txt"), val_data)
-            write_mapping_file(os.path.join(fold_dir, "test_files.txt"), test_data)
+            # Write mapping files with relative paths
+            write_mapping_file(
+                os.path.join(fold_dir, "train_files.txt"),
+                train_data,
+                input_dir,
+                target_dir,
+            )
+            write_mapping_file(
+                os.path.join(fold_dir, "val_files.txt"), val_data, input_dir, target_dir
+            )
+            write_mapping_file(
+                os.path.join(fold_dir, "test_files.txt"),
+                test_data,
+                input_dir,
+                target_dir,
+            )
 
             # Generate PSNR histogram for this fold
             train_psnr = [item[2] for item in train_data]

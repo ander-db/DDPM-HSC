@@ -1,0 +1,11 @@
+2024-10-06 18:10:37,155 - Input directory: ./data/wide_64x64
+2024-10-06 18:10:37,155 - Target directory: ./data/dud_64x64
+2024-10-06 18:10:37,155 - Seed: 42
+2024-10-06 18:10:37,155 - Total files after filtering: 880
+2024-10-06 18:10:37,155 - Split type: Regular (Train/Validation/Test)
+2024-10-06 18:10:37,155 - Train ratio: 0.70
+2024-10-06 18:10:37,155 - Validation ratio: 0.15
+2024-10-06 18:10:37,155 - Test ratio: 0.15
+2024-10-06 18:10:37,155 - Train files: 616
+2024-10-06 18:10:37,156 - Validation files: 132
+2024-10-06 18:10:37,156 - Test files: 132
