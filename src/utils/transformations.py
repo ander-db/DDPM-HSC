@@ -19,7 +19,7 @@ class RandomFlipRotateTransform:
         self.rotate_options = [0, 90, 180, 270]
 
     def __call__(
-        self, input_tensor: torch.Tensor, target_tensor: Optional[torch.Tensor] = None
+        self, input_tensor: torch.Tensor, target_tensor: torch.Tensor
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Apply random flip and rotation transformations to the input tensor.
@@ -31,6 +31,8 @@ class RandomFlipRotateTransform:
         Returns:
             Tuple[torch.Tensor, Optional
         """
+        input_tensor = input_tensor.squeeze()
+        target_tensor = target_tensor.squeeze()
 
         if input_tensor.dim() != 2:
             raise ValueError("Input tensor must have 2 dimensions (height, width)")
@@ -39,15 +41,16 @@ class RandomFlipRotateTransform:
         if random.random() < self.flip_prob:
             flip_type = random.choice(self.flip_options)
             input_tensor = self._apply_flip(input_tensor, flip_type)
-            if target_tensor is not None:
-                target_tensor = self._apply_flip(target_tensor, flip_type)
+            target_tensor = self._apply_flip(target_tensor, flip_type)
 
         # Apply rotation transformation
         if random.random() < self.rotate_prob:
             angle = random.choice(self.rotate_options)
             input_tensor = self._apply_rotation(input_tensor, angle)
-            if target_tensor is not None:
-                target_tensor = self._apply_rotation(target_tensor, angle)
+            target_tensor = self._apply_rotation(target_tensor, angle)
+
+        input_tensor = input_tensor.unsqueeze(0)
+        target_tensor = target_tensor.unsqueeze(0)
 
         return input_tensor, target_tensor
 
