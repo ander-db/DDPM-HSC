@@ -1,6 +1,10 @@
 # image2image-RAUNet-PytorchLightning
-RAUnet for image to image tasks implemeted with Pytorch Lightning
 
+<p align="center">
+  <img src=".github/banner_prediction.gif" alt="Banner" width="100%">
+</p>
+
+RAUnet for image to image tasks implemeted with Pytorch Lightning
 
 ## Mappings generator
 
