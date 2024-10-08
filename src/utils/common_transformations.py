@@ -1,5 +1,5 @@
-from src.utils.normalizations import NormalizeTransform
 from src.utils.scales import LogScaleTransform
+from src.utils.normalizations import NormalizeTransform
 from src.utils.transformations import RandomFlipRotateTransform
 
 
@@ -20,6 +20,12 @@ class Compose:
         return input_tensor, target_tensor
 
 
-TRANSFORM_LOG_NORM_FLIP = Compose(
+###################
+# TRANSFORMATIONS #
+###################
+
+TRANSFORM_LOG_NORM_DA = Compose(
     [LogScaleTransform(), NormalizeTransform(), RandomFlipRotateTransform()]
 )
+
+TRANSFORM_LOG_NORM = Compose([LogScaleTransform(), NormalizeTransform()])
