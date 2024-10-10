@@ -82,6 +82,11 @@ class DDPM_2D(l.LightningModule):
 
         noise_prediction = self.forward(noisy_ref_concat, t)
         loss = self.loss(noise_prediction, noise).mean()
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        predicted_samples = self.sample(ref)
+        _ = self.loss(predicted_samples, x).mean()
+        self.log("sample_train_loss", _)
 
         return loss
 
@@ -101,6 +106,8 @@ class DDPM_2D(l.LightningModule):
 
         loss = self.loss(predicted_samples, x).mean()
 
+        self.log("sample_val_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -119,12 +126,14 @@ class DDPM_2D(l.LightningModule):
 
         loss = self.loss(predicted_samples, x).mean()
 
+        self.log("sample_test_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
         return loss
 
     @torch.no_grad()
-    def add_noise(
-        self, x: torch.FloatTensor, t: torch.IntTensor
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    def _add_noise(
+        self, x: torch.FloatTensor, t: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Add noise to the input image x at timestep t
 
@@ -138,9 +147,6 @@ class DDPM_2D(l.LightningModule):
         """
         noise = torch.randn_like(x).to(x.dtype)  # Ensure noise matches x's dtype
 
-        if not isinstance(noise, torch.FloatTensor):
-            raise ValueError("Noise must be a float tensor")
-
         noise_img = self.noise_scheduler.add_noise(x, noise, t)
         return noise_img, noise
 
@@ -149,7 +155,7 @@ class DDPM_2D(l.LightningModule):
         return torch.randint(0, self.diffusion_steps, (batch_size,))
 
     @torch.no_grad()
-    def sample(self, ref: torch.Tensor) -> torch.FloatTensor:
+    def sample(self, ref: torch.Tensor) -> torch.Tensor:
         """
         Sample from the model
 
@@ -178,7 +184,7 @@ class DDPM_2D(l.LightningModule):
                 return_dict=False,
             )[0]
 
-        if not isinstance(x, torch.FloatTensor):
-            raise ValueError("Output must be a float tensor")
+        if not isinstance(x, torch.Tensor):
+            raise ValueError(f"Output must be a float tensor")
 
         return x
