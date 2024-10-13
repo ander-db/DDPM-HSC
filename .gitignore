@@ -162,3 +162,5 @@ cython_debug/
 #.idea/
 
 **/lightning_logs/
+**/cvpr_image2image_test/
+**/wandb/
