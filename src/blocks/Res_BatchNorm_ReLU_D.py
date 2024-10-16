@@ -30,14 +30,21 @@ class ResBlockBatchNorm(nn.Module):
         in_channels: int,
         out_channels: int,
         dropout_rate: float = 0.1,
+        initialization_method: str = "xavier_uniform",
     ):
         super().__init__()
+
+        # Save attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.dropout_rate = dropout_rate
 
+        # Build main path and residual connection
         self.main_path = self._build_main_path()
         self.residual_connection = self._build_residual_connection()
+
+        # Initialize weights
+        self._init_weights(initialization_method)
 
     def _build_main_path(self) -> nn.Sequential:
         return nn.Sequential(
@@ -65,6 +72,26 @@ class ResBlockBatchNorm(nn.Module):
         if self.in_channels != self.out_channels:
             return nn.Conv2d(self.in_channels, self.out_channels, kernel_size=1)
         return None
+
+    def _init_weights(self, initialization_method: str):
+        """Initialize weights using the specified method."""
+
+        if initialization_method == "xavier_uniform":
+
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+
+        elif initialization_method == "kaiming_normal":
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(
+                        m.weight, mode="fan_out", nonlinearity="relu"
+                    )
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

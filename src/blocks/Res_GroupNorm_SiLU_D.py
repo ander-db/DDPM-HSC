@@ -34,15 +34,23 @@ class ResBlockGroupNorm(nn.Module):
         out_channels: int,
         n_groups: int = 32,
         dropout_rate: float = 0.1,
+        initialization_method: str | None = None,
     ):
         super().__init__()
+
+        # Save attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.n_groups = n_groups
         self.dropout_rate = dropout_rate
 
+        # Build main path and residual connection
         self.main_path = self._build_main_path()
         self.residual_connection = self._build_residual_connection()
+
+        # Initialize weights
+        if initialization_method:
+            self._init_weights(initialization_method)
 
     def _adjust_groups(self, channels: int) -> int:
         if self.n_groups > channels:
@@ -75,11 +83,11 @@ class ResBlockGroupNorm(nn.Module):
         n_groups_second = self._adjust_groups(self.out_channels)
 
         return nn.Sequential(
-            nn.GroupNorm(n_groups_first, self.in_channels),
+            nn.GroupNorm(n_groups_first, self.in_channels, eps=1e-3),
             nn.SiLU(),
             nn.Conv2d(self.in_channels, self.out_channels, kernel_size=3, padding=1),
             nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
-            nn.GroupNorm(n_groups_second, self.out_channels),
+            nn.GroupNorm(n_groups_second, self.out_channels, eps=1e-3),
             nn.SiLU(),
             nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
             nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
@@ -89,6 +97,24 @@ class ResBlockGroupNorm(nn.Module):
         if self.in_channels != self.out_channels:
             return nn.Conv2d(self.in_channels, self.out_channels, kernel_size=1)
         return None
+
+    def _init_weights(self, initialization_method: str):
+        """Initialize weights using the specified method."""
+
+        if initialization_method == "xavier_uniform":
+
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+
+        elif initialization_method == "kaiming_normal":
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(m.weight)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

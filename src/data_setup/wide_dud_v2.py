@@ -66,6 +66,7 @@ class Image2ImageHSCDataModule(L.LightningDataModule):
         test_transform: Callable | None = None,
         load_in_memory: bool = False,
         num_workers: int = 11,
+        pin_memory: bool = True,
     ):
         super().__init__()
         self.mapping_dir = mapping_dir
@@ -75,6 +76,7 @@ class Image2ImageHSCDataModule(L.LightningDataModule):
         self.test_transform = test_transform
         self.load_in_memory = load_in_memory
         self.num_workers = num_workers
+        self.pin_memory = pin_memory
 
         self.train_files = self.read_mapping_file(
             os.path.join(mapping_dir, "train_files.txt")
@@ -126,18 +128,27 @@ class Image2ImageHSCDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=True,
         )
 
     def val_dataloader(self):
         if self.val_dataset is None:
             raise ValueError("Val dataset is not set up")
         return DataLoader(
-            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+            self.val_dataset,
+            #shuffle=True, 
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
         )
 
     def test_dataloader(self):
         if self.test_dataset is None:
             raise ValueError("Test dataset is not set up")
         return DataLoader(
-            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
         )

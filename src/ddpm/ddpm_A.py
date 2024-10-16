@@ -17,7 +17,7 @@ class DDPM_2D(l.LightningModule):
         in_channels: int = 1,
         out_channels: int = 1,
         diffusion_steps: int = 50,
-        pe_emb_dim=64,
+        pe_emb_dim: int = 64,
         lr: float = 1e-3,
         dropout: float = 0.05,
         groups: int = 32,
@@ -55,6 +55,7 @@ class DDPM_2D(l.LightningModule):
             in_channels=self.in_channels,
             out_channels=self.out_channels,
             encoder_channels=self.encoder_channels,
+            time_embedding_dim=self.pe_emb_dim,
             loss_fn=nn.MSELoss(),
         )
 
@@ -68,7 +69,19 @@ class DDPM_2D(l.LightningModule):
         optimizer = Adam(self.parameters(), lr=self.lr)
         return optimizer
 
+    @torch.no_grad()
+    def _calc_ssim(self, preds, target):
+        from torchmetrics.functional.image import (
+            structural_similarity_index_measure,
+        )
+
+        ssim = structural_similarity_index_measure(preds, target)
+        if isinstance(ssim, tuple):
+            ssim = ssim[0]
+        return ssim
+
     def training_step(self, batch, batch_idx):
+
         ref, x = batch
 
         batch_size = x.shape[0]
@@ -82,11 +95,14 @@ class DDPM_2D(l.LightningModule):
 
         noise_prediction = self.forward(noisy_ref_concat, t)
         loss = self.loss(noise_prediction, noise).mean()
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
         predicted_samples = self.sample(ref)
-        _ = self.loss(predicted_samples, x).mean()
-        self.log("sample_train_loss", _)
+        _ = torch.nn.functional.l1_loss(predicted_samples, x).mean()
+        self.log("train/l1_loss", _, on_step=True, on_epoch=True, prog_bar=True)
+
+        ssim = self._calc_ssim(predicted_samples, x)
+        self.log("train/ssim", ssim)
 
         return loss
 
@@ -104,9 +120,11 @@ class DDPM_2D(l.LightningModule):
         ref, x = batch
         predicted_samples = self.sample(ref)
 
-        loss = self.loss(predicted_samples, x).mean()
+        loss = torch.nn.functional.l1_loss(predicted_samples, x).mean()
+        self.log("val/l1_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
-        self.log("sample_val_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        ssim = self._calc_ssim(predicted_samples, x)
+        self.log("val/ssim", ssim)
 
         return loss
 
@@ -124,9 +142,9 @@ class DDPM_2D(l.LightningModule):
         ref, x = batch
         predicted_samples = self.sample(ref)
 
-        loss = self.loss(predicted_samples, x).mean()
+        loss = torch.nn.functional.l1_loss(predicted_samples, x).mean()
 
-        self.log("sample_test_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("test/l1_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
         return loss
 

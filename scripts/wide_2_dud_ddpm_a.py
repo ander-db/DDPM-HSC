@@ -2,9 +2,26 @@ import lightning as L
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers.wandb import WandbLogger
 
+from src.callbacks.comparison import DenoiseComparisonDDPM
+from src.callbacks.vision import LogVisionMetricsDDPM
 from src.ddpm.ddpm_A import DDPM_2D
 from src.data_setup.wide_dud_v2 import Image2ImageHSCDataModule
 from src.utils.common_transformations import TRANSFORM_LOG_NORM_DA, TRANSFORM_LOG_NORM
+
+
+def plot_samples(ref, expected, pred):
+    import matplotlib.pyplot as plt
+
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+
+    for i, (img, title) in enumerate(
+        zip([ref[0, 0], expected[0, 0], pred[0, 0]], ["Ref", "Expected", "Pred"])
+    ):
+        axs[i].imshow(img, cmap="cubehelix_r", vmin=-1, vmax=1)
+        axs[i].set_title(title)
+        axs[i].axis("off")
+
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -13,9 +30,9 @@ if __name__ == "__main__":
 
     # Constants
     BATCH_SIZE = 16
-    DIFF_STEPS = 5
-    MAX_EPOCHS = 250
-    LR = 5e-4
+    DIFF_STEPS = 50
+    MAX_EPOCHS = 1_000
+    LR = 1e-3
     ENCODER_CHANNELS = [16, 32, 64, 128]
 
     # Load, setup the Data
@@ -48,11 +65,17 @@ if __name__ == "__main__":
     )
 
     # Callback
-    wandb_logger = WandbLogger(project="cvpr_image2image_test")
+    wandb_logger = WandbLogger(
+        project="cvpr_image2image_test", name="wide_2_dud_ddpm_a", prefix="ddpm"
+    )
+    comparison = DenoiseComparisonDDPM(log_every_n_epochs=50, batch_idx=0, n_samples=10)
 
     # Trainer
     trainer = L.Trainer(
-        max_epochs=MAX_EPOCHS, logger=wandb_logger, log_every_n_steps=10
+        max_epochs=MAX_EPOCHS,
+        logger=wandb_logger,
+        log_every_n_steps=10,
+        callbacks=[comparison],
     )
 
     # Trainer Fit
@@ -68,24 +91,9 @@ if __name__ == "__main__":
     expected_test = expected_test.to("cuda")
     ddpm_model = ddpm_model.to("cuda")
 
-    print(f'ref_test device: {ref_test.device}')
-    print(f'expected_test device: {expected_test.device}')
+    print(f"ref_test device: {ref_test.device}")
+    print(f"expected_test device: {expected_test.device}")
 
     pred = ddpm_model.sample(ref_test)
-
-    # Plot ref, expected, pred
-    def plot_samples(ref, expected, pred):
-        import matplotlib.pyplot as plt
-
-        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-
-        for i, (img, title) in enumerate(
-            zip([ref[0, 0], expected[0, 0], pred[0, 0]], ["Ref", "Expected", "Pred"])
-        ):
-            axs[i].imshow(img, cmap="cubehelix_r", vmin=-1, vmax=1)
-            axs[i].set_title(title)
-            axs[i].axis("off")
-
-        plt.show()
 
     plot_samples(ref_test.cpu(), expected_test.cpu(), pred.cpu())

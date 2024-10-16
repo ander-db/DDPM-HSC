@@ -19,13 +19,19 @@ class SpatialAttentionUNet(nn.Module):
         dropout_rate (float, optional): Dropout rate. Default is 0.1.
     """
 
-    def __init__(self, g_channels: int, dropout_rate: float = 0.1):
+    def __init__(
+        self,
+        g_channels: int,
+        dropout_rate: float = 0.1,
+        initialization_method: str = "xavier_uniform",
+    ):
         super(SpatialAttentionUNet, self).__init__()
 
         self.g_channels = g_channels
         self.dropout_rate = dropout_rate
 
         self._build_model()
+        self._init_weights(initialization_method)
 
     def _build_model(self):
         """Build the optimized model architecture."""
@@ -53,15 +59,25 @@ class SpatialAttentionUNet(nn.Module):
             nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
         )
 
-        self._init_weights()
+    def _init_weights(self, initialization_method: str):
+        """Initialize weights using the specified method."""
 
-    def _init_weights(self):
-        """Initialize weights using Xavier uniform initialization."""
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+        if initialization_method == "xavier_uniform":
+
+            for m in self.modules():
+                if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                    nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+
+        elif initialization_method == "kaiming_normal":
+            for m in self.modules():
+                if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                    nn.init.kaiming_normal_(
+                        m.weight, mode="fan_out", nonlinearity="relu"
+                    )
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
     def forward(
         self, g: torch.Tensor, x: torch.Tensor
@@ -86,7 +102,6 @@ class SpatialAttentionUNet(nn.Module):
         f = self.sigmoid(f)
 
         attention_map = self.upsample(f)
-        attention_map = attention_map.clamp(min=0, max=1)
 
         y = x * attention_map
 
