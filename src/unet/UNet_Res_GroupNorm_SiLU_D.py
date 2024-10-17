@@ -1,6 +1,6 @@
-from typing import List, Optional
 import torch
 import torch.nn as nn
+from typing import List, Optional
 from torch.optim.adam import Adam
 import lightning as l
 
@@ -20,9 +20,10 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         out_channels=3,
         encoder_channels: List[int] = [64, 128, 256, 512],
         time_embedding_dim: int | None = None,
-        loss_fn=nn.MSELoss(),
-        dropout_rate=0.1,
-        lr=1e-4,
+        loss_fn: nn.Module = nn.L1Loss(),
+        dropout_rate: float = 0.1,
+        lr: float = 1e-4,
+        n_groups: int = 32,
     ):
         super(UNet_Res_GroupNorm_SiLU_D, self).__init__()
         self.save_hyperparameters(ignore=["loss_fn"])
@@ -35,14 +36,32 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         self.dropout_rate = dropout_rate
         self.lr = lr
 
+        self.n_groups = n_groups
+
         self._build_network()
 
-        self.ref = []
-        self.preds = []
-        self.targets = []
+        # Note: This is usefull to not repeat predictions in the callbacks
+        # Training storage
+        self.train_ref = []
+        self.train_preds = []
+        self.train_targets = []
+
+        # Validation storage
+        self.val_ref = []
+        self.val_preds = []
+        self.val_targets = []
+
+        # Test storage
+        self.test_ref = []
+        self.test_preds = []
+        self.test_targets = []
 
     def _build_network(self):
-        self.first_layer = ResBlockGroupNorm(self.in_channels, self.encoder_channels[0])
+        self.first_layer = ResBlockGroupNorm(
+            self.in_channels,
+            self.encoder_channels[0],
+            n_groups=min(self.in_channels, self.n_groups),
+        )
 
         self.encoder = nn.ModuleList(
             [
@@ -50,6 +69,7 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
                     self.encoder_channels[i],
                     self.encoder_channels[i + 1],
                     dropout_rate=self.dropout_rate,
+                    n_groups=min(self.encoder_channels[i], self.n_groups),
                 )
                 for i in range(len(self.encoder_channels) - 2)
             ]
@@ -59,6 +79,7 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
             self.encoder_channels[-2],
             self.encoder_channels[-1],
             dropout_rate=self.dropout_rate,
+            n_groups=min(self.encoder_channels[-1], self.n_groups),
         )
 
         self.decoder = nn.ModuleList(
@@ -67,13 +88,21 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
                     self.decoder_channels[i],
                     self.decoder_channels[i + 1],
                     dropout_rate=self.dropout_rate,
+                    n_groups=min(
+                        self.decoder_channels[i + 1],
+                        self.decoder_channels[i],
+                        self.n_groups,
+                    ),
                 )
                 for i in range(len(self.decoder_channels) - 1)
             ]
         )
 
         self.last_layer = ResBlockGroupNorm(
-            self.decoder_channels[-1], self.out_channels, dropout_rate=self.dropout_rate
+            self.decoder_channels[-1],
+            self.out_channels,
+            dropout_rate=self.dropout_rate,
+            n_groups=min(self.decoder_channels[-1], self.out_channels, self.n_groups),
         )
 
         self.attention = nn.ModuleList(
@@ -148,66 +177,52 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         return self.last_layer(g)
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x, None)
-        loss = self.loss_fn(y_hat, y)
+        if batch_idx == 0:
+            self.train_ref = []
+            self.train_preds = []
+            self.train_targets = []
+
+        ref, true = batch
+        prediction = self(ref, None)
+        loss = self.loss_fn(prediction, true)
+
+        self.train_ref.append(ref)
+        self.train_targets.append(true)
+        self.train_preds.append(prediction)
+
         self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x, None)
-        loss = self.loss_fn(y_hat, y)
+        if batch_idx == 0:
+            self.val_ref = []
+            self.val_preds = []
+            self.val_targets = []
+
+        ref, true = batch
+        prediction = self(ref, None)
+        loss = self.loss_fn(prediction, true)
+
+        self.val_ref.append(ref)
+        self.val_targets.append(true)
+        self.val_preds.append(prediction)
+
         self.log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
         return loss
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx, dataloader_idx) -> None:
+        if batch_idx == 0:
+            self.test_ref = []
+            self.test_preds = []
+            self.test_targets = []
 
-        x, y = batch
-        prediction = self.forward(x)
+        ref, true = batch
+        prediction = self.forward(ref)
 
-        self.ref.append(x)
-        self.preds.append(prediction)
-        self.targets.append(y)
-
-        return None
-
-    def on_test_epoch_end(self) -> None:
-
-        if not self.trainer.max_epochs:
-            return
-
-        if self.current_epoch < self.trainer.max_epochs- 1:
-            return
-
-        l1 = nn.L1Loss(reduction="none")
-        l2 = nn.MSELoss(reduction="none")
-
-        all_preds = torch.cat(self.preds)
-        all_targets = torch.cat(self.targets)
-        # all_refs = torch.cat(self.ref)
-
-        # Calculate loss and std deviation
-        l1_loss = l1(all_preds, all_targets).mean(dim=(1, 2, 3))
-        print(f"[INFO] l1_loss.shape: {l1_loss.shape}")
-        l1_loss_mean, l1_loss_std = l1_loss.mean(), l1_loss.std()
-
-        l2_loss = l2(all_preds, all_targets).mean(dim=(1, 2, 3))
-        print(f"[INFO] l2_loss.shape: {l2_loss.shape}")
-        l2_loss_mean, l2_loss_std = l2_loss.mean(), l2_loss.std()
-
-        self.log(
-            "test/l1_mean", l1_loss_mean, on_step=False, on_epoch=True, prog_bar=True
-        )
-        self.log(
-            "test/l1_std", l1_loss_std, on_step=False, on_epoch=True, prog_bar=False
-        )
-        self.log(
-            "test/l2_mean", l2_loss_mean, on_step=False, on_epoch=True, prog_bar=True
-        )
-        self.log(
-            "test/l2_std", l2_loss_std, on_step=False, on_epoch=True, prog_bar=False
-        )
+        self.test_ref.append(ref)
+        self.test_targets.append(true)
+        self.test_preds.append(prediction)
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.lr, eps=1e-4)

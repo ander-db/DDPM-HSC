@@ -62,6 +62,7 @@ class DDPM_2D(l.LightningModule):
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             pe_emb = self.time_embedding(t.detach())
+            print(f'[DEBUG] pe_emb.shape: {pe_emb.shape}')
 
         return self.model(x, pe_emb)
 
@@ -192,6 +193,7 @@ class DDPM_2D(l.LightningModule):
         # Repite for each timestep
         for i in range(self.diffusion_steps - 1, -1, -1):
             model_input = torch.cat([x, ref], dim=1)
+
             t = torch.full((ref.shape[0],), i, device=device, dtype=torch.long)
             predicted_noise = self.forward(model_input, t)
 

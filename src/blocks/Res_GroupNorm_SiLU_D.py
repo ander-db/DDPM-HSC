@@ -83,15 +83,27 @@ class ResBlockGroupNorm(nn.Module):
         n_groups_second = self._adjust_groups(self.out_channels)
 
         return nn.Sequential(
-            nn.GroupNorm(n_groups_first, self.in_channels, eps=1e-3),
-            nn.SiLU(),
-            nn.Conv2d(self.in_channels, self.out_channels, kernel_size=3, padding=1),
-            nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
-            nn.GroupNorm(n_groups_second, self.out_channels, eps=1e-3),
-            nn.SiLU(),
-            nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
-            nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
+           nn.GroupNorm(n_groups_first, self.in_channels, eps=1e-3),
+           nn.SiLU(),
+           nn.Conv2d(self.in_channels, self.out_channels, kernel_size=3, padding=1),
+           nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
+           nn.GroupNorm(n_groups_second, self.out_channels, eps=1e-3),
+           nn.SiLU(),
+           nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+           nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
         )
+
+        # Instead of group, silu, conv, dropout, group, silu, conv, dropout
+        # We'll use conv, group, silu, dropout, conv, group
+
+        #return nn.Sequential(
+        #    nn.Conv2d(self.in_channels, self.out_channels, kernel_size=3, padding=1),
+        #    nn.GroupNorm(n_groups_second, self.out_channels, eps=1e-3),
+        #    nn.SiLU(),
+        #    nn.Dropout(self.dropout_rate) if self.dropout_rate > 0 else nn.Identity(),
+        #    nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+        #    nn.GroupNorm(n_groups_second, self.out_channels, eps=1e-3),
+        #)
 
     def _build_residual_connection(self) -> Optional[nn.Module]:
         if self.in_channels != self.out_channels:

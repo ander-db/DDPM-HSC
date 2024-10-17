@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import lightning as L
 from typing import Any
 from lightning.pytorch.callbacks import Callback
@@ -9,7 +10,7 @@ from torchmetrics.functional.image.psnr import peak_signal_noise_ratio
 
 class LogVisionMetricsBase(Callback):
     """
-    Callback to log vision metrics (SSIM, PSNR) for the denoising model.
+    Callback to log metrics (PSNR, SSIM, MAE, MSE) for the vision models.
 
     Args:
     - log_every_n_epochs (int): Log the metrics every n epochs
@@ -29,7 +30,7 @@ class LogVisionMetricsBase(Callback):
 
     @torch.no_grad()
     def calc_preds(self, pl_module: "L.LightningModule", ref: torch.Tensor):
-        pass
+        raise NotImplementedError
 
     @torch.no_grad()
     def on_train_batch_end(
@@ -40,7 +41,15 @@ class LogVisionMetricsBase(Callback):
         batch: Any,
         batch_idx: int,
     ) -> None:
-        self.calc_batch_metrics(pl_module, outputs, batch, batch_idx, prefix="train")
+        if self.batch_idx != -1 and batch_idx != self.batch_idx:
+            return
+
+        preds = torch.cat(pl_module.train_preds)
+        target = torch.cat(pl_module.train_targets)
+
+        self._log_metrics(
+            pl_module=pl_module, target=target, preds=preds, prefix="train"
+        )
 
     @torch.no_grad()
     def on_validation_batch_end(
@@ -52,7 +61,14 @@ class LogVisionMetricsBase(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
-        self.calc_batch_metrics(pl_module, outputs, batch, batch_idx, prefix="val")
+
+        if self.batch_idx != -1 and batch_idx != self.batch_idx:
+            return
+
+        preds = torch.cat(pl_module.val_preds)
+        target = torch.cat(pl_module.val_targets)
+
+        self._log_metrics(pl_module=pl_module, target=target, preds=preds, prefix="val")
 
     @torch.no_grad()
     def on_test_batch_end(
@@ -64,57 +80,92 @@ class LogVisionMetricsBase(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
-        self.calc_batch_metrics(pl_module, outputs, batch, batch_idx, prefix="test")
 
-    @torch.no_grad()
-    def calc_batch_metrics(self, pl_module, outputs, batch, batch_idx, prefix):
         if self.batch_idx != -1 and batch_idx != self.batch_idx:
             return
 
-        if (
-            self.log_every_n_epochs != -1
-            and pl_module.current_epoch % self.log_every_n_epochs != 0
-        ):
-            return
+        preds = torch.cat(pl_module.test_preds)
+        target = torch.cat(pl_module.test_targets)
 
-        ref, x = batch
-        ref = ref.to(pl_module.device)
-        x = x.to(pl_module.device)
-
-        # Log metrics
-        preds = self.calc_preds(pl_module=pl_module, ref=ref)
-
-        self._log_metrics(pl_module=pl_module, target=x, preds=preds, prefix=prefix)
+        self._log_metrics(
+            pl_module=pl_module, target=target, preds=preds, prefix="test"
+        )
 
     @torch.no_grad()
     def _calc_psnr(self, preds, targets):
-        return peak_signal_noise_ratio(preds, targets)
+        psnr = peak_signal_noise_ratio(
+            preds,
+            targets,
+            reduction="none",
+            data_range=(-1, 1),
+            dim=(1, 2, 3),
+        )
+
+        mean_psnr = psnr.mean()
+        std_psnr = psnr.std()
+
+        return mean_psnr, std_psnr
 
     @torch.no_grad()
     def _calc_ssim(self, preds, target):
-        ssim = structural_similarity_index_measure(preds, target)
+        ssim = structural_similarity_index_measure(
+            preds, target, reduction="none", data_range=(-1, 1)
+        )
         if isinstance(ssim, tuple):
             ssim = ssim[0]
-        return ssim
+
+        mean_ssim = ssim.mean()
+        std_ssim = ssim.std()
+        return mean_ssim, std_ssim
 
     @torch.no_grad()
     def _calc_mae(self, preds, target):
-        return torch.mean(torch.abs(preds - target))
+        _mae = nn.L1Loss(reduction="none")
+        mae = _mae(preds, target).mean(dim=(1, 2, 3))
+
+        mean_mae = mae.mean()
+        std_mae = mae.std()
+
+        return mean_mae, std_mae
+
+    @torch.no_grad()
+    def _calc_mse(self, preds, target):
+        _mse = nn.MSELoss(reduction="none")
+        mse = _mse(preds, target).mean(dim=(1, 2, 3))
+
+        mean_mse = mse.mean()
+        std_mse = mse.std()
+
+        return mean_mse, std_mse
 
     @torch.no_grad()
     def _log_metrics(self, *, pl_module, target, preds, prefix):
-        psnr = self._calc_psnr(preds, target)
-        ssim = self._calc_ssim(preds, target)
-        mae = self._calc_mae(preds, target)
+        # Calculate metrics
+        psnr, std_psnr = self._calc_psnr(preds, target)
+        ssim, std_ssim = self._calc_ssim(preds, target)
+        mae, std_mae = self._calc_mae(preds, target)
+        mse, std_mse = self._calc_mse(preds, target)
 
+        # PSNR
         pl_module.log(f"{prefix}/psnr", psnr)
+        pl_module.log(f"{prefix}/psnr_std", std_psnr)
+
+        # SSIM
         pl_module.log(f"{prefix}/ssim", ssim)
+        pl_module.log(f"{prefix}/ssim_std", std_ssim)
+
+        # MAE
         pl_module.log(f"{prefix}/mae", mae)
+        pl_module.log(f"{prefix}/mae_std", std_mae)
+
+        # MSE
+        pl_module.log(f"{prefix}/mse", mse)
+        pl_module.log(f"{prefix}/mse_std", std_mse)
 
 
 class LogVisionMetricsDDPM(LogVisionMetricsBase):
     """
-    Callback to log vision metrics (SSIM, PSNR, LPIPS) for the DDPM denoising model.
+    Callback to log metrics (PSNR, SSIM, MAE, MSE) for the DDPM denoising model.
 
     Args:
     - log_every_n_epochs (int): Log the metrics every n epochs
@@ -131,7 +182,7 @@ class LogVisionMetricsDDPM(LogVisionMetricsBase):
 
 class LogVisionMetricsUNet(LogVisionMetricsBase):
     """
-    Callback to log vision metrics (SSIM, PSNR, LPIPS) for the DDPM denoising model.
+    Callback to log metrics (PSNR, SSIM, MAE, MSE) for the UNet denoising model.
 
     Args:
     - log_every_n_epochs (int): Log the metrics every n epochs

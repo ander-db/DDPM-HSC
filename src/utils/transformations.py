@@ -12,7 +12,7 @@ class RandomFlipRotateTransform:
         rotate_prob (float): Probability of applying a rotation transformation
     """
 
-    def __init__(self, flip_prob: float = 0.5, rotate_prob: float = 0.5):
+    def __init__(self, flip_prob: float = 1, rotate_prob: float = 1):
         self.flip_prob = flip_prob
         self.rotate_prob = rotate_prob
         self.flip_options = ["no_flip", "flip_x", "flip_y", "flip_xy"]
@@ -38,17 +38,16 @@ class RandomFlipRotateTransform:
             raise ValueError("Input tensor must have 2 dimensions (height, width)")
 
         # Apply flip transformation
-        if random.random() < self.flip_prob:
-            flip_type = random.choice(self.flip_options)
-            input_tensor = self._apply_flip(input_tensor, flip_type)
-            target_tensor = self._apply_flip(target_tensor, flip_type)
+        flip_type = random.choice(self.flip_options)
+        input_tensor = self._apply_flip(input_tensor, flip_type)
+        target_tensor = self._apply_flip(target_tensor, flip_type)
 
         # Apply rotation transformation
-        if random.random() < self.rotate_prob:
-            angle = random.choice(self.rotate_options)
-            input_tensor = self._apply_rotation(input_tensor, angle)
-            target_tensor = self._apply_rotation(target_tensor, angle)
+        angle = random.choice(self.rotate_options)
+        input_tensor = self._apply_rotation(input_tensor, angle)
+        target_tensor = self._apply_rotation(target_tensor, angle)
 
+        # Add channel dimension
         input_tensor = input_tensor.unsqueeze(0)
         target_tensor = target_tensor.unsqueeze(0)
 
