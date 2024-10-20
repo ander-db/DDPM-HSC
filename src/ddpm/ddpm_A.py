@@ -20,7 +20,7 @@ class DDPM_2D(l.LightningModule):
         pe_emb_dim: int = 64,
         lr: float = 1e-3,
         dropout: float = 0.05,
-        groups: int = 32,
+        n_groups: int = 32,
         beta_start: float = 0.002,
         beta_end: float = 0.2,
         encoder_channels: List[int] = [64, 128, 256, 512],
@@ -34,7 +34,7 @@ class DDPM_2D(l.LightningModule):
         self.pe_emb_dim = pe_emb_dim
         self.lr = lr
         self.dropout = dropout
-        self.groups = groups
+        self.groups = n_groups
         self.scheduler = scheduler
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -49,6 +49,22 @@ class DDPM_2D(l.LightningModule):
 
         self._build_network()
 
+        # Note: This is usefull to not repeat predictions in the callbacks
+        # Training storage
+        self.train_ref = []
+        self.train_preds = []
+        self.train_targets = []
+
+        # Validation storage
+        self.val_ref = []
+        self.val_preds = []
+        self.val_targets = []
+
+        # Test storage
+        self.test_ref = []
+        self.test_preds = []
+        self.test_targets = []
+
     @torch.no_grad()
     def _build_network(self):
         self.model = UNet_Res_GroupNorm_SiLU_D(
@@ -56,35 +72,29 @@ class DDPM_2D(l.LightningModule):
             out_channels=self.out_channels,
             encoder_channels=self.encoder_channels,
             time_embedding_dim=self.pe_emb_dim,
-            loss_fn=nn.MSELoss(),
+            loss_fn=self.loss,
+            dropout_rate=self.dropout,
+            lr=self.lr,
+            n_groups=self.groups,
         )
 
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             pe_emb = self.time_embedding(t.detach())
-            print(f'[DEBUG] pe_emb.shape: {pe_emb.shape}')
 
         return self.model(x, pe_emb)
 
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=self.lr)
+        optimizer = Adam(self.parameters(), lr=self.lr, eps=1e-3)
         return optimizer
 
-    @torch.no_grad()
-    def _calc_ssim(self, preds, target):
-        from torchmetrics.functional.image import (
-            structural_similarity_index_measure,
-        )
-
-        ssim = structural_similarity_index_measure(preds, target)
-        if isinstance(ssim, tuple):
-            ssim = ssim[0]
-        return ssim
-
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx, dataloader_idx=None):
+        if batch_idx == 0:
+            self.train_ref = []
+            self.train_preds = []
+            self.train_targets = []
 
         ref, x = batch
-
         batch_size = x.shape[0]
 
         t = self._generate_random_timesteps(batch_size)
@@ -98,16 +108,15 @@ class DDPM_2D(l.LightningModule):
         loss = self.loss(noise_prediction, noise).mean()
         self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
-        predicted_samples = self.sample(ref)
-        _ = torch.nn.functional.l1_loss(predicted_samples, x).mean()
-        self.log("train/l1_loss", _, on_step=True, on_epoch=True, prog_bar=True)
+        #predicted_samples = self.sample(ref)
 
-        ssim = self._calc_ssim(predicted_samples, x)
-        self.log("train/ssim", ssim)
+        #self.train_ref.append(ref)
+        #self.train_preds.append(predicted_samples)
+        #self.train_targets.append(x)
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=None):
         """
         Compute the validation loss for the model by sampling the images and computing the loss
 
@@ -118,16 +127,25 @@ class DDPM_2D(l.LightningModule):
         Returns:
             torch.Tensor: Validation loss
         """
+        if batch_idx == 0:
+            self.val_ref = []
+            self.val_preds = []
+            self.val_targets = []
+
         ref, x = batch
-        predicted_samples = self.sample(ref)
 
-        loss = torch.nn.functional.l1_loss(predicted_samples, x).mean()
-        self.log("val/l1_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        t = self._generate_random_timesteps(x.shape[0])
+        noisy_batch, noise = self._add_noise(x, t)
+        noisy_ref_concat = torch.cat([noisy_batch, ref], dim=1)
 
-        ssim = self._calc_ssim(predicted_samples, x)
-        self.log("val/ssim", ssim)
+        loss = self.loss(self.forward(noisy_ref_concat, t), noise).mean()
+        self.log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
-        return loss
+        #predicted_samples = self.sample(ref)
+
+        #self.val_ref.append(ref)
+        #self.val_preds.append(predicted_samples)
+        #self.val_targets.append(x)
 
     def test_step(self, batch, batch_idx):
         """
@@ -140,14 +158,18 @@ class DDPM_2D(l.LightningModule):
         Returns:
             torch.Tensor: Test loss
         """
+
+        if batch_idx == 0:
+            self.test_ref = []
+            self.test_preds = []
+            self.test_targets = []
+
         ref, x = batch
         predicted_samples = self.sample(ref)
 
-        loss = torch.nn.functional.l1_loss(predicted_samples, x).mean()
-
-        self.log("test/l1_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-
-        return loss
+        self.test_ref.append(ref)
+        self.test_preds.append(predicted_samples)
+        self.test_targets.append(x)
 
     @torch.no_grad()
     def _add_noise(

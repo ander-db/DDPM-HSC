@@ -118,14 +118,13 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
             self._build_time_embeddings()
 
     def _build_time_embeddings(self):
-        self.time_embeddings = nn.ModuleList(
-            [
-                TimeEmbeddingProjectionLinearSiLU(self.time_embedding_dim, channel)
-                for channel in self.encoder_channels
-                + [self.encoder_channels[-1] * 2]
-                + self.decoder_channels
-            ]
-        )
+
+        self.time_embeddings = nn.ModuleList()
+
+        for _channels in self.encoder_channels + self.decoder_channels[1:]:
+            self.time_embeddings.append(
+                TimeEmbeddingProjectionLinearSiLU(self.time_embedding_dim, _channels)
+            )
 
     def forward(
         self, x: torch.Tensor, t: Optional[torch.Tensor] = None
@@ -160,7 +159,7 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
 
         for i, encoder_layer in enumerate(self.encoder):
             g = encoder_layer(g)
-            t_emb = self.time_embeddings[len(skip_connections)](t)
+            t_emb = self.time_embeddings[i + 1](t)
             g += t_emb[:, :, None, None]
             skip_connections.append(g)
 
@@ -191,6 +190,7 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
         self.train_preds.append(prediction)
 
         self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -209,13 +209,14 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
 
         self.log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
-        return loss
-
-    def test_step(self, batch, batch_idx, dataloader_idx) -> None:
+    def test_step(self, batch, batch_idx, dataloader_idx=0) -> None:
         if batch_idx == 0:
             self.test_ref = []
             self.test_preds = []
             self.test_targets = []
+
+        print("test_step batch_idx:", batch_idx)
+        print('test_ref len:', len(self.test_ref))
 
         ref, true = batch
         prediction = self.forward(ref)

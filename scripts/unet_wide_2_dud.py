@@ -1,10 +1,13 @@
+import torch.nn as nn
+
 import lightning as L
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers.wandb import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping
 
-from src.callbacks.comparison import DenoiseComparisonUNet
-from src.callbacks.vision import LogVisionMetricsUNet
+from src.callbacks.metrics_new import MetricsCallbackUNet
+from src.callbacks.visual_comparison import DenoiseComparisonUNet
+from src.callbacks.metrics import LogVisionMetricsUNet
 from src.data_setup.wide_dud_v2 import Image2ImageHSCDataModule
 from src.unet.UNet_Res_GroupNorm_SiLU_D import UNet_Res_GroupNorm_SiLU_D
 from src.utils.common_transformations import TRANSFORM_LOG_NORM_DA, TRANSFORM_LOG_NORM
@@ -14,15 +17,18 @@ if __name__ == "__main__":
     seed_everything(42)
 
     # Constants
-    BATCH_SIZE = 16
-    MAX_EPOCHS = 5
-    LR = 2e-4
-    ENCODER_CHANNELS = [64, 128, 256, 512]
+    BATCH_SIZE = 32
+    MAX_EPOCHS = 10
+    LR = 1e-3  # 2e-4
+    # ENCODER_CHANNELS = [64, 128, 256, 512]
+    # ENCODER_CHANNELS = [8, 16, 32, 64]
+    # ENCODER_CHANNELS = [4, 8, 16, 32, 64, 128]
+    ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
     DROPOUT_RATE = 0.10
 
     # Load, setup the Data
     data_module = Image2ImageHSCDataModule(
-        mapping_dir="./data/mappings/testing_mapping/",
+        mapping_dir="./data/mappings/full_seed_42_train_70_val_15/",
         batch_size=BATCH_SIZE,
         train_transform=TRANSFORM_LOG_NORM_DA,
         val_transform=TRANSFORM_LOG_NORM,
@@ -40,13 +46,15 @@ if __name__ == "__main__":
 
     # Callbacks
     wandb_logger = WandbLogger(
-        project="cvpr_image2image_test", name="unet_wide_2_dud_init"
+        project="cvpr_image2image_test", name="unet_wide_2_dud_mae"
     )
     visual_samples = DenoiseComparisonUNet(
         log_every_n_epochs=5, batch_idx=0, n_samples=27
     )
-    metrics = LogVisionMetricsUNet(log_every_n_epochs=5, batch_idx=-1)
+    metrics = LogVisionMetricsUNet(log_every_n_epochs=15, batch_idx=-1)
     early_stopping = EarlyStopping(monitor="val/loss", patience=100)
+
+    new_metrics = MetricsCallbackUNet()
 
     # Model
     unet_model = UNet_Res_GroupNorm_SiLU_D(
@@ -55,6 +63,7 @@ if __name__ == "__main__":
         lr=LR,
         encoder_channels=ENCODER_CHANNELS,
         dropout_rate=DROPOUT_RATE,
+        loss_fn=nn.MSELoss(),
     )
 
     # Trainer
@@ -62,9 +71,27 @@ if __name__ == "__main__":
         max_epochs=MAX_EPOCHS,
         logger=wandb_logger,
         log_every_n_steps=1,
-        callbacks=[visual_samples, metrics, early_stopping],
+        # callbacks=[visual_samples, metrics, early_stopping],
+        callbacks=[new_metrics],
     )
 
-    trainer.fit(unet_model, train_dataloader, val_dataloader)
+    trainer.fit(
+        model=unet_model,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
+    )
 
-    trainer.test(unet_model, test_dataloader)
+    trainer.test(
+        model=unet_model,
+        dataloaders=[train_dataloader],
+    )
+
+    trainer.test(
+        model=unet_model,
+        dataloaders=[val_dataloader],
+    )
+
+    trainer.test(
+        model=unet_model,
+        dataloaders=[test_dataloader],
+    )
