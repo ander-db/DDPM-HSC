@@ -19,11 +19,11 @@ if __name__ == "__main__":
 
     # Constants
     BATCH_SIZE = 32
-    MAX_EPOCHS = 1_000
-    LR = 2e-4  # 2e-4
-    DIFF_STEPS = 50
-    # ENCODER_CHANNELS = [64, 128, 256, 512]
-    ENCODER_CHANNELS = [8, 16, 32, 64, 128, 256]
+    MAX_EPOCHS = 2_000
+    LR = 4e-3  # 2e-4
+    DIFF_STEPS = 250
+    ENCODER_CHANNELS = [64, 128, 256, 512, 1024]
+    # ENCODER_CHANNELS = [8, 16, 32, 64, 128, 256]
     # ENCODER_CHANNELS = [4, 8, 16, 32, 64, 128]
     # ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
     DROPOUT_RATE = 0.10
