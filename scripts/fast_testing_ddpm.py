@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 import lightning as L
@@ -5,11 +6,9 @@ from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers.wandb import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping
 
-from src.callbacks.metrics_new import MetricsCallbackUNet
-from src.callbacks.visual_comparison import DenoiseComparisonUNet
-from src.callbacks.metrics import LogVisionMetricsUNet
+from src.callbacks.metrics_new import MetricsCallbackDDPM
 from src.data_setup.wide_dud_v2 import Image2ImageHSCDataModule
-from src.unet.UNet_Res_GroupNorm_SiLU_D import UNet_Res_GroupNorm_SiLU_D
+from src.ddpm.ddpm_A import DDPM_2D
 from src.utils.common_transformations import TRANSFORM_LOG_NORM_DA, TRANSFORM_LOG_NORM
 
 
@@ -18,13 +17,16 @@ if __name__ == "__main__":
 
     # Constants
     BATCH_SIZE = 32
-    MAX_EPOCHS = 10
-    LR = 1e-3  # 2e-4
-    # ENCODER_CHANNELS = [64, 128, 256, 512]
-    # ENCODER_CHANNELS = [8, 16, 32, 64]
+    MAX_EPOCHS = 5_000
+    LR = 4e-3  # 2e-4
+    DIFF_STEPS = 10
+    # ENCODER_CHANNELS = [64, 128, 256, 512, 1024]
+    # ENCODER_CHANNELS = [8, 16, 32, 64, 128, 256]
     # ENCODER_CHANNELS = [4, 8, 16, 32, 64, 128]
-    ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
+    #ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
+    ENCODER_CHANNELS = [2, 4, 8, 16]
     DROPOUT_RATE = 0.10
+    LOG_EVERY_N_EPOCHS = 2
 
     # Load, setup the Data
     data_module = Image2ImageHSCDataModule(
@@ -46,23 +48,23 @@ if __name__ == "__main__":
 
     # Callbacks
     wandb_logger = WandbLogger(
-        project="cvpr_image2image_test", name="unet_wide_2_dud_mae"
+        project="cvpr_image2image_test", name="ddpm_pruebas_misc"
     )
-    visual_samples = DenoiseComparisonUNet(
-        log_every_n_epochs=5, batch_idx=0, n_samples=27
-    )
-    metrics = LogVisionMetricsUNet(log_every_n_epochs=15, batch_idx=-1)
-    early_stopping = EarlyStopping(monitor="val/loss", patience=100)
+    #visual_samples = DenoiseComparisonDDPM(
+    #    log_every_n_epochs=25, batch_idx=0, n_samples=27
+    #)
+    # early_stopping = EarlyStopping(monitor="val/loss", patience=100)
 
-    new_metrics = MetricsCallbackUNet()
+    new_metrics = MetricsCallbackDDPM(log_every_n_epochs=LOG_EVERY_N_EPOCHS, log_visualization=True, n_samples=27)
 
     # Model
-    unet_model = UNet_Res_GroupNorm_SiLU_D(
-        in_channels=1,
+    ddpm_model = DDPM_2D(
+        in_channels=2,
         out_channels=1,
+        diffusion_steps=DIFF_STEPS,
+        dropout=DROPOUT_RATE,
         lr=LR,
         encoder_channels=ENCODER_CHANNELS,
-        dropout_rate=DROPOUT_RATE,
         loss_fn=nn.MSELoss(),
     )
 
@@ -71,27 +73,30 @@ if __name__ == "__main__":
         max_epochs=MAX_EPOCHS,
         logger=wandb_logger,
         log_every_n_steps=1,
-        # callbacks=[visual_samples, metrics, early_stopping],
         callbacks=[new_metrics],
     )
 
+    # Training
+
     trainer.fit(
-        model=unet_model,
+        model=ddpm_model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
     )
 
+    # Testing
+
     trainer.test(
-        model=unet_model,
+        model=ddpm_model,
         dataloaders=[train_dataloader],
     )
 
     trainer.test(
-        model=unet_model,
+        model=ddpm_model,
         dataloaders=[val_dataloader],
     )
 
     trainer.test(
-        model=unet_model,
+        model=ddpm_model,
         dataloaders=[test_dataloader],
     )

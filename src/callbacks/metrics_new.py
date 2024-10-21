@@ -1,19 +1,108 @@
-from typing import Any
+from typing import Any, List, Tuple
+import wandb
 from lightning.pytorch.utilities.types import STEP_OUTPUT
+from matplotlib.colors import Normalize
 import torch
 import torch.nn as nn
 import lightning as L
+import numpy as np
+import numpy.typing as npt
+import matplotlib.pyplot as plt
 from lightning.pytorch.callbacks import Callback
 from torchmetrics.functional.image import structural_similarity_index_measure
 from torchmetrics.functional.image.psnr import peak_signal_noise_ratio
 
-__constants__ = ["LogVisionMetricsBase"]
+
+def apply_colormap(arr, vmin, vmax, cmap="viridis"):
+
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    colormap = plt.get_cmap(cmap)
+    rgba_img = colormap(norm(arr))
+    rgb_img = np.delete(rgba_img, 3, 2)
+    return rgb_img
+
+
+def gen_grid_comparison(
+    ref: torch.Tensor,
+    target: torch.Tensor,
+    preds: torch.Tensor,
+    n_samples: int,
+    vmin: float = -1.0,
+    vmax: float = 1.0,
+) -> Tuple[List[npt.NDArray], float, float]:
+    """
+    Generate a grid comparison between reference, target, and prediction tensors.
+
+    Args:
+        ref: Reference tensor
+        target: Target tensor
+        preds: Prediction tensor
+        n_samples: Number of samples to include in grid
+
+    Returns:
+        Tuple containing:
+        - List of numpy arrays forming the grid
+        - Minimum value for visualization
+        - Maximum value for visualization
+    """
+    # Convert tensors to numpy arrays
+    ref_np: npt.NDArray = ref.squeeze().cpu().numpy()
+    target_np: npt.NDArray = target.squeeze().cpu().numpy()
+    preds_np: npt.NDArray = preds.squeeze().cpu().numpy()
+
+    # Calculate absolute difference
+    diff: npt.NDArray = np.abs(target_np - preds_np)
+
+    # Create grid
+    grid: List[npt.NDArray] = []
+    for i in range(n_samples):
+        grid.extend([ref_np[i], target_np[i], preds_np[i], diff[i]])
+
+    return grid, vmin, vmax
+
+
+def _log_vision_comparison(
+    trainer: "L.Trainer",
+    ref: torch.Tensor,
+    target: torch.Tensor,
+    preds: torch.Tensor,
+    log_key: str,
+    n_samples: int = 27,
+    vmin: float = -1.0,
+    vmax: float = 1.0,
+    cmap: str = "viridis",
+):
+    grid, vmin, vmax = gen_grid_comparison(ref, target, preds, n_samples, vmin, vmax)
+
+    # Apply colormap
+    grid_colored = []
+    for i, img in enumerate(grid):
+        if (i + 1) % 4 == 0:
+            img = apply_colormap(img, vmin, vmax, cmap="bwr")  # Image of the difference
+        else:
+            img = apply_colormap(img, vmin, vmax, cmap="cubehelix_r")
+        grid_colored.append(img)
+
+    # Generate the list of wandb images
+    wandb_images = [wandb.Image(img) for img in grid_colored]
+
+    # Log to wandb
+    trainer.logger.log_image(
+        log_key,
+        images=wandb_images,
+        step=trainer.global_step,
+    )
 
 
 class MetricsCallbackUNet(Callback):
 
-    def __init__(self):
+    def __init__(
+        self, log_visualization=False, n_visualizations=17, log_every_n_epochs=1
+    ):
         super().__init__()
+
+        self.log_visualization = log_visualization
+        self.n_visualizations = n_visualizations
 
     def on_train_epoch_end(
         self, trainer: "L.Trainer", pl_module: "L.LightningModule"
@@ -26,10 +115,21 @@ class MetricsCallbackUNet(Callback):
     def on_validation_epoch_end(
         self, trainer: "L.Trainer", pl_module: "L.LightningModule"
     ) -> None:
+        refs = torch.cat(pl_module.val_ref)
         preds = torch.cat(pl_module.val_preds)
         target = torch.cat(pl_module.val_targets)
 
         log_metrics(pl_module=pl_module, target=target, preds=preds, prefix="val")
+
+        if self.log_visualization:
+            _log_vision_comparison(
+                trainer=trainer,
+                ref=refs,
+                target=target,
+                preds=preds,
+                log_key="val/samples",
+                n_samples=self.n_visualizations,
+            )
 
     def on_test_epoch_end(
         self, trainer: "L.Trainer", pl_module: "L.LightningModule"
@@ -42,10 +142,14 @@ class MetricsCallbackUNet(Callback):
 
 class MetricsCallbackDDPM(Callback):
 
-    def __init__(self, log_every_n_epochs: int = 10):
+    def __init__(
+        self, log_every_n_epochs: int = 10, log_visualization=False, n_samples=17
+    ):
         super().__init__()
 
         self.log_every_n_epochs = log_every_n_epochs
+        self.log_visualization = log_visualization
+        self.n_samples = n_samples
 
         self.train_ref = []
         self.train_preds = []
@@ -141,26 +245,15 @@ class MetricsCallbackDDPM(Callback):
 
         log_metrics(pl_module=pl_module, target=target, preds=preds, prefix="val")
 
-    # def on_test_batch_end(
-    #    self,
-    #    trainer: "L.Trainer",
-    #    pl_module: "L.LightningModule",
-    #    outputs: STEP_OUTPUT,
-    #    batch: Any,
-    #    batch_idx: int,
-    #    dataloader_idx: int = 0,
-    # ) -> None:
-
-    #    if batch_idx == 0:
-    #        self.test_ref = []
-    #        self.test_preds = []
-
-    #    ref, x = batch
-    #    predicted_samples = pl_module.sample(ref)
-
-    #    self.test_ref.append(ref)
-    #    self.test_preds.append(predicted_samples)
-    #    self.test_targets.append(x)
+        if self.log_visualization:
+            _log_vision_comparison(
+                trainer=trainer,
+                ref=torch.cat(self.val_ref),
+                target=target,
+                preds=preds,
+                log_key="val/samples",
+                n_samples=self.n_samples,
+            )
 
     def on_test_epoch_end(
         self, trainer: "L.Trainer", pl_module: "L.LightningModule"

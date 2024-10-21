@@ -215,9 +215,6 @@ class UNet_Res_GroupNorm_SiLU_D(l.LightningModule):
             self.test_preds = []
             self.test_targets = []
 
-        print("test_step batch_idx:", batch_idx)
-        print('test_ref len:', len(self.test_ref))
-
         ref, true = batch
         prediction = self.forward(ref)
 
