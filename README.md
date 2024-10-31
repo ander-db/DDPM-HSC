@@ -1,8 +1,13 @@
-# DDPMs for Astronomical Image Enhancement
-
 <p align="center">
   <img src=".github/banner_prediction.gif" alt="Banner" width="100%">
 </p>
+
+# DDPMs for Astronomical Image Enhancement
+
+<p align="center">
+  <img src=".github/muestra_actualizada_1.png" alt="Banner" width="100%">
+</p>
+
 
 This repository contains part of the source code of my Master's Thesis, featuring complete from-scratch implementations of both U-Net and Diffusion Model architectures using PyTorch Lightning. The implementation includes all architectural components, from the basic building blocks to the complete training pipelines.
 
