@@ -16,17 +16,17 @@ if __name__ == "__main__":
     seed_everything(42)
 
     # Constants
-    BATCH_SIZE = 32
-    MAX_EPOCHS = 5_000
-    LR = 4e-3  # 2e-4
-    DIFF_STEPS = 10
-    # ENCODER_CHANNELS = [64, 128, 256, 512, 1024]
+    BATCH_SIZE = 64 # 32
+    MAX_EPOCHS = 10_000
+    LR = 1e-3  # 2e-4
+    DIFF_STEPS = 100
+    ENCODER_CHANNELS = [64, 128, 256, 512]
     # ENCODER_CHANNELS = [8, 16, 32, 64, 128, 256]
     # ENCODER_CHANNELS = [4, 8, 16, 32, 64, 128]
     #ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
-    ENCODER_CHANNELS = [2, 4, 8, 16]
+    #ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
     DROPOUT_RATE = 0.10
-    LOG_EVERY_N_EPOCHS = 2
+    LOG_EVERY_N_EPOCHS = 50
 
     # Load, setup the Data
     data_module = Image2ImageHSCDataModule(
@@ -48,11 +48,9 @@ if __name__ == "__main__":
 
     # Callbacks
     wandb_logger = WandbLogger(
-        project="cvpr_image2image_test", name="ddpm_pruebas_misc"
+        project="cvpr_image2image_test", name="ddpm_pruebas_misc_v2"
     )
-    #visual_samples = DenoiseComparisonDDPM(
-    #    log_every_n_epochs=25, batch_idx=0, n_samples=27
-    #)
+
     # early_stopping = EarlyStopping(monitor="val/loss", patience=100)
 
     new_metrics = MetricsCallbackDDPM(log_every_n_epochs=LOG_EVERY_N_EPOCHS, log_visualization=True, n_samples=27)

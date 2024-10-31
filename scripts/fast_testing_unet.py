@@ -15,13 +15,13 @@ if __name__ == "__main__":
     seed_everything(42)
 
     # Constants
-    BATCH_SIZE = 32
-    MAX_EPOCHS = 10
+    BATCH_SIZE = 128 #
+    MAX_EPOCHS = 10_000
     LR = 1e-3  # 2e-4
-    # ENCODER_CHANNELS = [64, 128, 256, 512]
+    ENCODER_CHANNELS = [64, 128, 256, 512]
     # ENCODER_CHANNELS = [8, 16, 32, 64]
     # ENCODER_CHANNELS = [4, 8, 16, 32, 64, 128]
-    ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
+    # ENCODER_CHANNELS = [2, 4, 8, 16, 32, 64]
     DROPOUT_RATE = 0.10
 
     # Load, setup the Data

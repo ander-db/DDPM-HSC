@@ -276,6 +276,7 @@ def log_metrics(*, pl_module, target, preds, prefix):
     ssim, std_ssim = calc_ssim(preds, target)
     mae, std_mae = calc_mae(preds, target)
     mse, std_mse = calc_mse(preds, target)
+    fft_mse, std_fft_mse = calc_fft_mse_metrics(preds, target)
 
     # PSNR
     pl_module.log(f"{prefix}/psnr", psnr)
@@ -292,6 +293,10 @@ def log_metrics(*, pl_module, target, preds, prefix):
     # MSE
     pl_module.log(f"{prefix}/mse", mse)
     pl_module.log(f"{prefix}/mse_std", std_mse)
+
+    # FFT MSE
+    pl_module.log(f"{prefix}/fft_mse", fft_mse)
+    pl_module.log(f"{prefix}/fft_mse_std", std_fft_mse)
 
 
 @torch.no_grad()
@@ -343,3 +348,25 @@ def calc_mse(preds, target):
     std_mse = mse.std()
 
     return mean_mse, std_mse
+
+
+@torch.no_grad()
+def calc_fft_mse_metrics(preds: torch.Tensor, trues: torch.Tensor):
+    fft_preds = calc_fft(preds)
+    fft_trues = calc_fft(trues)
+
+    mse_loss = torch.nn.MSELoss(reduction="none")(fft_preds, fft_trues)
+
+    mean_mse = mse_loss.mean()
+    std_mse = mse_loss.std()
+
+    return mean_mse, std_mse
+
+
+def calc_fft(image: torch.Tensor) -> torch.Tensor:
+    fft = torch.fft.fftn(image, dim=(-2, -1))
+    fft_shift = torch.fft.fftshift(fft, dim=(-2, -1))
+
+    magnitude_spectrum = torch.log(torch.abs(fft_shift) + 1)
+
+    return magnitude_spectrum

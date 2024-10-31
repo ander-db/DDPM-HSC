@@ -29,7 +29,7 @@ class DDPM_2D(l.LightningModule):
     ):
         super(DDPM_2D, self).__init__()
 
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore="loss_fn")
         self.diffusion_steps = diffusion_steps
         self.pe_emb_dim = pe_emb_dim
         self.lr = lr
@@ -108,12 +108,6 @@ class DDPM_2D(l.LightningModule):
         loss = self.loss(noise_prediction, noise).mean()
         self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
-        #predicted_samples = self.sample(ref)
-
-        #self.train_ref.append(ref)
-        #self.train_preds.append(predicted_samples)
-        #self.train_targets.append(x)
-
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
@@ -140,12 +134,6 @@ class DDPM_2D(l.LightningModule):
 
         loss = self.loss(self.forward(noisy_ref_concat, t), noise).mean()
         self.log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-
-        #predicted_samples = self.sample(ref)
-
-        #self.val_ref.append(ref)
-        #self.val_preds.append(predicted_samples)
-        #self.val_targets.append(x)
 
     def test_step(self, batch, batch_idx):
         """
